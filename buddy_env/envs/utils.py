@@ -21,9 +21,10 @@ def copy_file(input_file: str = '', tmp_file_name: str = '') -> str:
         return ''
 
 
-def get_features(compiler: str, source_file: str, flag: str = '') -> Dict[str, Any]:
+def get_features(compiler: str, source_file: str, tmp_file: str, flag: str = '') -> Dict[str, Any]:
     """
 
+    :param tmp_file: 临时文件路径
     :param compiler: 编译器路径
     :param source_file: 要被编译的文件
     :param flag: 编译参数
@@ -34,7 +35,8 @@ def get_features(compiler: str, source_file: str, flag: str = '') -> Dict[str, A
 
     info = {'features': None, 'state': True}
     try:
-        dialects_res = print_op(compiler, source_file, flag)
+        apply_pass(compiler, source_file, tmp_file, flag)
+        dialects_res = print_op(compiler, tmp_file)
         features = find_dialects(dialects_res)
         info['features'] = features
         return info
@@ -52,7 +54,7 @@ def find_dialects(src_str: str) -> DefaultDict[str, Dict[str, int]]:
     """
 
     # func.func
-    re_dialect = re.compile(r'\b([A-Za-z]\w*)\.([.A-Za-z]+)\b\s*,\s(\d+)')
+    re_dialect = re.compile(r'\b([A-Za-z]\w*)\.([.A-Za-z_]+)\b\s*,\s(\d+)')
 
     # {arith: {addf: 1, constant:8, mulf: 1}, ... , }
     dialect = defaultdict(dict)
@@ -65,7 +67,16 @@ def find_dialects(src_str: str) -> DefaultDict[str, Dict[str, int]]:
     return dialect
 
 
-def print_op(compiler: str, file_path: str, flag: str) -> str:
+def apply_pass(compiler: str, source_file_path: str, tmp_file_path: str, flag: str):
+    command = compiler + ' ' + source_file_path + ' ' + flag + ' > ' + tmp_file_path
+    try:
+        ret = subprocess.run(command, shell=True, check=True, capture_output=True)
+    except subprocess.CalledProcessError as cpe:
+        print("apply_pass: CalledProcessError")
+        raise
+
+
+def print_op(compiler: str, file_path: str) -> str:
     """
 
     :param compiler: 编译器路径
@@ -74,7 +85,7 @@ def print_op(compiler: str, file_path: str, flag: str) -> str:
     :return:
     """
 
-    command = compiler + ' ' + file_path + ' ' + flag + ' ' + '--print-op-stats'
+    command = compiler + ' ' + file_path + ' --print-op-stats'
     try:
         ret = subprocess.run(command, shell=True, check=True, capture_output=True)
         # print(ret.stderr.decode('utf-8'))

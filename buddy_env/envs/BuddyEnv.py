@@ -9,13 +9,14 @@ from typing import Dict
 
 class BuddyEnv(gym.Env):
 
-    def __init__(self, input_file: str = '',
-                 action_file: str = '',
-                 dialect_file: str = '',
-                 compiler: str = '',
-                 translator: str = ''):
-        self.source_file = None
-        self._input_file = input_file
+    def __init__(self, input_file,
+                 action_file,
+                 dialect_file,
+                 compiler,
+                 translator,
+                 max_pass_length: int = 10):
+        self.source_file = input_file
+        self.tmp_file = './tmp.mlir'
 
         # 加载参数集合
         with open(action_file) as f:
@@ -44,9 +45,10 @@ class BuddyEnv(gym.Env):
 
         self.compiler = compiler
         self.translator = translator
-        self.passes = []
-        self.rewards = []
-        self.max_passes_length = 10
+        self.episode_passes_list = None
+        self.episode_passes_str = None
+        self.episode_reward = None
+        self.max_pass_length = max_pass_length
 
     def _action_to_str(self, action) -> str:
         return self.params_space[action]
@@ -55,7 +57,7 @@ class BuddyEnv(gym.Env):
         return self.dialects_space[dialect_name]
 
     def _get_obs_and_info(self, flag: str = '') -> (np.ndarray, Dict):
-        info = get_features(self.compiler, self.source_file, flag)
+        info = get_features(self.compiler, self.source_file, self.tmp_file, flag)
         mlir_state = info['state']
 
         obs = np.zeros((self.dialect_size,), dtype=np.int8)
@@ -73,66 +75,96 @@ class BuddyEnv(gym.Env):
     def _test(self) -> bool:
         print("test!!!")
         try:
-            command = self.translator + ' ' + '--mlir-to-llvmir -o tmp.ll'
+            command = self.translator + ' ' + self.tmp_file + ' --mlir-to-llvmir -o tmp.ll'
             subprocess.run(command, shell=True, check=True)
             return True
         except subprocess.CalledProcessError as cpe:
-            print('copy mlir file error!')
+            print('translate mlir file error!')
             return False
 
     def step(self, action):
-        param = self._action_to_str(action)
 
-        # info = _get_info()
-        observation = None
-        info = None
-        reward = 0
+        """
+
+        :param action: pass index
+        :return:
+
+        Note:
+            在step中维护episode_passes_list和episode_reward。
+            更新old_obs。
+            如果action与episode之前的重复，那么reward -= 10
+        """
+
+        rew = 0
         terminated = False  # 看看terminated和 truncated的具体定义，别用错了
         truncated = False
 
-        observation, info = self._get_obs_and_info(flag=param)
+        param = self._action_to_str(action)
+
+        # 通过给punish，防止agent重复作用param
+        if param in self.episode_passes_list:
+            rew -= 5
+
+        self.episode_passes_list.append(action)
+        self.episode_passes_str += param + ' '
+
+        observation, info = self._get_obs_and_info(flag=self.episode_passes_str)
 
         if info['state'] is False:
             truncated = True
-            reward -= 30  # 这个数是拍脑门想的
+            rew -= 30  # 这个数是拍脑门想的
         else:
-            reward += self._compute_reward(observation)
+            print("cool!!!")
+            rew += self._compute_reward(observation)
             termi = {'llvm', 'builtin'}
-            if set(info.keys()) == termi:
+            print(info)
+            if set(info['features'].keys()) == termi and len(info['features']['builtin'].keys()) == 1:
                 terminated = True
-                reward += 50
+                rew += 50
                 if self._test():
                     truncated = False
-                    reward += 100
+                    rew += 100
                 else:
                     truncated = True
-                    reward -= 100
+                    rew -= 100
 
-            self.rewards.append(reward)
-            self.passes.append(param)
+        self.episode_reward += rew
+        self.old_obs = observation
 
-        return observation, reward, terminated, truncated, info
+        if len(env.episode_passes_list) >= env.max_pass_length:
+            env.close()
+            env.reset()
+
+        return observation, rew, terminated, truncated, info
 
     def render(self):
         """
         This function prints information about the passes.
         """
 
-        print("pass: {}".format(self.passes))
+        print("pass: {}".format(self.episode_passes_list))
+        print("reward: {}".format(self.episode_reward))
 
     # TODO: 计算reward的方式是靠近llvm dialect，还可以把op也加进来，llvm的op越多，reward越高。
     # 辅助以这种减少dialect数的reward作用。
     # 可以让出现llvm op的reward变多，减少dialect的reward变少
     # 后期加入时间度量后，再更新reward。
     def _compute_reward(self, obs: np.ndarray) -> int:
-        rew = -1  # 如果没有任何变化的话，就是-1
+        rew = 0  # 如果没有任何变化的话，就是-1
 
         # 比较old_obs与new_obs的区别，找出区别
         tmp = self.old_obs == obs
+
+        flag = True
         # 如果dialect对应的op数量有变化，就reward+1
         for equal_flag in tmp:
             if not equal_flag:
+                flag = False
                 rew += 1
+
+        # flag is true 说明没有任何变化
+        if flag:
+            rew -= 10
 
         # 如果llvm 的op数量有变化，reward额外+1
         if not tmp[17]:  # 17 是llvm 的index
@@ -156,22 +188,27 @@ class BuddyEnv(gym.Env):
         # for dialect in only_old_dialect:
         #     rew += 1  # 消除了一些dialect
 
-        self.old_obs = obs
+        print('compute reward:' + str(rew))
         return rew
 
     # 创建临时mlir文件，并获得当前的observation
     def reset(self, seed=None, options=None) -> (np.ndarray, Dict):
-        self.source_file = copy_file(self._input_file, tmp_file_name='tmp.mlir')
+        # self.source_file = copy_file(self._input_file, tmp_file_name='tmp.mlir')
         self.old_obs, info = self._get_obs_and_info(flag='')
-        self.passes = []
-        self.rewards = []
-        # print(self.old_obs)
+        self.episode_passes_list = []
+        self.episode_passes_str = ""
+        self.episode_reward = 0
         return self.old_obs, info
 
     # 删除tmp.mlir文件。
     def close(self):
+        print('episode sum is ' + str(self.episode_reward))
+        print("episode pass: {}".format(self.episode_passes_list))
+        self.episode_passes_list = None
+        self.episode_reward = None
+
         try:
-            command = 'rm -f ' + self.source_file
+            command = 'rm -f ' + self.tmp_file
             subprocess.run(command, shell=True, check=True)
         except subprocess.CalledProcessError as cpe:
             print("close file error!")
@@ -188,20 +225,26 @@ if __name__ == '__main__':
     env = BuddyEnv(source_file, param_file, dialect_file, compiler, translator)
     obs, info = env.reset()
 
+    pre_pass = iter([0, 1, 2, 3, 4, 5, 6, 7])
+
     # train
     for i in range(100):
         action = env.action_space.sample()
         # print(action)
-        obs, reward, terminated, truncated, done = env.step(action)
+        obs, reward, terminated, truncated, done = env.step(next(pre_pass))
         print('reward:', reward)
         if terminated:
             print("yes")
 
         if truncated:
-            print("failed")
-            print("episode reward: " + str(env.rewards))
+            print("no")
+            print("episode reward: " + str(env.episode_reward))
             env.close()
             env.reset()
             continue
+
+        # if len(env.episode_passes_list) >= env.max_pass_length:
+        #     env.close()
+        #     env.reset()
 
     env.close()
