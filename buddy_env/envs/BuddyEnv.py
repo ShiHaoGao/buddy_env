@@ -32,20 +32,15 @@ class BuddyEnv(gym.Env):
         for k, v in zip(dialects, range(self.dialect_size)):
             self.dialects_space[k] = v
 
-        # 记录上一次的info，用于与新的info比较，计算reward
-        self.old_info = None
+        # 记录上一次的obs，用于与新的obs比较，计算reward
+        self.old_obs = None
 
         # 初始化action_space
         self.action_space = spaces.Discrete(self.params_size)
 
         # 这里后期我们可以用一个网络，这个网络训练我们究竟应该从mlir文本中取得什么样的observation才比较好。
         # 现在，我们仅仅就选择用所有dialect和其对应的op，作为observation。
-        self.observation_space = spaces.Dict(
-            {
-                "Dialects": spaces.MultiBinary(self.dialect_size),
-                "Op_count": spaces.Box(low=0, high=np.inf, shape=(self.dialect_size,), dtype=int),
-            }
-        )
+        self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.dialect_size,), dtype=np.int8)
 
         self.compiler = compiler
         self.translator = translator
@@ -67,9 +62,11 @@ class BuddyEnv(gym.Env):
 
         # build new obs
         if mlir_state is True:
-            for dialect, Ops in info.items():
-                for _, count, in Ops.items():
-                    obs[self._dialect_str_to_index(dialect)] += count
+            for dialect, Ops in info['features'].items():
+                op_count = 0
+                for _, v, in Ops.items():
+                    op_count = int(v) + op_count
+                obs[self._dialect_str_to_index(dialect)] = op_count
 
         return obs, info
 
@@ -99,7 +96,7 @@ class BuddyEnv(gym.Env):
             truncated = True
             reward -= 30  # 这个数是拍脑门想的
         else:
-            reward += self._compute_reward(info)
+            reward += self._compute_reward(observation)
             termi = {'llvm', 'builtin'}
             if set(info.keys()) == termi:
                 terminated = True
@@ -127,41 +124,49 @@ class BuddyEnv(gym.Env):
     # 辅助以这种减少dialect数的reward作用。
     # 可以让出现llvm op的reward变多，减少dialect的reward变少
     # 后期加入时间度量后，再更新reward。
-    def _compute_reward(self, info: Dict) -> int:
+    def _compute_reward(self, obs: np.ndarray) -> int:
         rew = -1  # 如果没有任何变化的话，就是-1
 
-        # 比较old_info与new_info的区别，找出区别
-        old_dialect = self.old_info.keys()
-        new_dialect = info.keys()
-        same_dialect = old_dialect & new_dialect
-        only_new_dialect = new_dialect - old_dialect
-        only_old_dialect = old_dialect - new_dialect
-
-        for dialect in same_dialect:
-            differ = set(self.old_info[dialect].items()) ^ set(info[dialect].items())
-            if differ is not None:
-                rew += 1  # 在dialect内部有变化，reward+5
-            if dialect == 'llvm':
-                rew += 1  # 鼓励对llvm中op的增加
-
-        for dialect in only_new_dialect:
-            rew += 1  # 出现了新的dialect
-            if dialect == 'llvm':  # 尽快出现llvm dialect
+        # 比较old_obs与new_obs的区别，找出区别
+        tmp = self.old_obs == obs
+        # 如果dialect对应的op数量有变化，就reward+1
+        for equal_flag in tmp:
+            if not equal_flag:
                 rew += 1
 
-        for dialect in only_old_dialect:
-            rew += 1  # 消除了一些dialect
+        # 如果llvm 的op数量有变化，reward额外+1
+        if not tmp[17]:  # 17 是llvm 的index
+            rew += 1
+        # for index, less_flag in enumerate(np.less(tmp, self.old_obs)):
+        #     if less_flag:
+        #
+        #
+        # for dialect in same_dialect:
+        #     differ = set(self.old_info[dialect].items()) ^ set(info[dialect].items())
+        #     if differ is not None:
+        #         rew += 1  # 在dialect内部有变化，reward+
+        #     if dialect == 'llvm':
+        #         rew += 1  # 鼓励对llvm中op的增加
+        #
+        # for dialect in only_new_dialect:
+        #     rew += 1  # 出现了新的dialect
+        #     if dialect == 'llvm':  # 尽快出现llvm dialect
+        #         rew += 1
+        #
+        # for dialect in only_old_dialect:
+        #     rew += 1  # 消除了一些dialect
 
-        self.old_info = info
+        self.old_obs = obs
         return rew
 
     # 创建临时mlir文件，并获得当前的observation
     def reset(self, seed=None, options=None) -> (np.ndarray, Dict):
         self.source_file = copy_file(self._input_file, tmp_file_name='tmp.mlir')
-        obs, self.old_info = self._get_obs_and_info(flag='')
+        self.old_obs, info = self._get_obs_and_info(flag='')
         self.passes = []
         self.rewards = []
-        return obs, self.old_info
+        # print(self.old_obs)
+        return self.old_obs, info
 
     # 删除tmp.mlir文件。
     def close(self):
@@ -178,7 +183,9 @@ if __name__ == '__main__':
     # param_file = '../res/params_space.json'
     param_file = '../res/label.json'
     dialect_file = '../res/dialects_space.json'
-    env = BuddyEnv(source_file, param_file, dialect_file)
+    compiler = '../tools/mlir-opt'
+    translator = '../tools/mlir-translate'
+    env = BuddyEnv(source_file, param_file, dialect_file, compiler, translator)
     obs, info = env.reset()
 
     # train
@@ -186,12 +193,13 @@ if __name__ == '__main__':
         action = env.action_space.sample()
         # print(action)
         obs, reward, terminated, truncated, done = env.step(action)
-
+        print('reward:', reward)
         if terminated:
             print("yes")
 
         if truncated:
             print("failed")
+            print("episode reward: " + str(env.rewards))
             env.close()
             env.reset()
             continue

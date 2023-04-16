@@ -26,4 +26,5 @@
 wrapper：
 1. resetWrapper：在出现文件错误后，在计算完reward后，就要调用close和reset重新设置环境。注意，observation和action space都要重置。
 2. actionWrapper: 记录一个episode内的action sequence
-3. rewardWrapper：记录一个episode内的reward sequence
+3. uniqueActionWrapper: 在一个episode中不允许重复，重复则扣分
+4. rewardWrapper：记录一个episode内的reward sequence

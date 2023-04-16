@@ -86,8 +86,8 @@ def test_ppo(args=get_args()):
     env = gym.make('buddy_env/BuddyEnv-v0', input_file=args.source_file, action_file=args.param_file,
                    dialect_file=args.dialect_file, compiler=args.compiler, translator=args.translator)
     obs, info = env.reset()
-    # print(env.observation_space.shape)
-    # print(env.action_space)
+    print(env.observation_space.shape)
+    print(env.action_space)
 
     # model & optimizer
     net = Net(env.observation_space.shape, hidden_sizes=[64, 64], device=device)
@@ -104,6 +104,17 @@ def test_ppo(args=get_args()):
     train_collector = Collector(policy, env, ReplayBuffer(20000))
     # test_collector = Collector(policy, test_envs)
     print("1")
+
+    # train_collector.reset()
+    # env.reset()
+    # train_collector.reset()
+    # for i in range(10):
+    #     train_collector.collect(n_step=2000)
+    #     # 0 means taking all data stored in train_collector.buffer
+    #     policy.update(0, train_collector.buffer, batch_size=512, repeat=1)
+    #     train_collector.reset_buffer(keep_statistics=True)
+    #     print('range' + str(i) + 'finished')
+
     # trainer
     result = onpolicy_trainer(
         policy,
@@ -151,22 +162,7 @@ if __name__ == '__main__':
 # test_envs = DummyVectorEnv([lambda: gym.make('CartPole-v1') for _ in range(10)])
 
 
-#
-# # trainer
-# result = onpolicy_trainer(
-#     policy,
-#     train_collector,
-#     test_collector,
-#     max_epoch=10,
-#     step_per_epoch=50000,
-#     repeat_per_collect=10,
-#     episode_per_test=10,
-#     batch_size=256,
-#     step_per_collect=2000,
-#     stop_fn=lambda mean_reward: mean_reward >= 195,
-# )
-# print(result)
-#
+
 # # Let's watch its performance!
 # policy.eval()
 # result = test_collector.collect(n_episode=1, render=False)
