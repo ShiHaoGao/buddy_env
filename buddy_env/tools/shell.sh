@@ -15,3 +15,4 @@
 #echo finished!
 
 ./mlir-opt ../res/linalg-conv2d.mlir -convert-linalg-to-loops -lower-affine -convert-scf-to-cf -convert-vector-to-llvm -convert-memref-to-llvm -convert-arith-to-llvm -convert-func-to-llvm -reconcile-unrealized-casts --print-op-stats
+#./mlir-translate ./tmp.mlir --mlir-to-llvmir -o tmp.ll

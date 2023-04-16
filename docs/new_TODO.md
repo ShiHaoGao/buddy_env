@@ -17,10 +17,26 @@
 
 - [x] 修改info格式，加入state，表示程序状态是否正常。
 - [x] 修改observation格式，加入op信息。
-- [ ] 添加wrapper
+- [x] 添加wrapper(不需要写wrapper)
 - [ ] 测试PPO
-- [ ] 完善reset，reset代表一个episode结束，需要清空一些参数
+- [x] 完善reset，reset代表一个episode结束，需要清空一些参数
+- [x] 修改action_space，变成一个tuple，存参数序列。这是为了限制最大长度（不需要）但是每次step中，都要用episode_pass来当参数。
+- [x] 完成新的reward设计
+- [x] 完成test函数测试
 
+
+新的reward设计：（reward设计的太麻烦了，人家都特别简单，但是我们这里的reward太稀疏了，没办法呀）
+- 如果在一个episode中，有重复的param，那么reward -= 10
+- 经过一个pass后，如果没有变化，那么rew -= 10
+- 经过一个pass后，如果有变化，每个变化的dialect中，rew += 1，如果llvm变化了，额外 rew += 1（因为作用要lower到llvm上）
+- 如果agent在一个episode中给出重复的pass，rew -= 5
+- 如果中间某个参数作用后，编译失败，rew -= 30
+- 如果最终成功translate， rew += 100，反之 -= 100
+
+
+问题：
+1. 如何设定最大的pass_step，在哪里检查这个长度
+2. 如何保证pass在一个episode中不重复   通过给punish，在训练中减少重复选择param
 
 
 wrapper：
@@ -28,3 +44,4 @@ wrapper：
 2. actionWrapper: 记录一个episode内的action sequence
 3. uniqueActionWrapper: 在一个episode中不允许重复，重复则扣分
 4. rewardWrapper：记录一个episode内的reward sequence
+5. 最大步长wrapper:在到达最大步长以后，失败，fail，扣分，然后，把step中的代码看一看
