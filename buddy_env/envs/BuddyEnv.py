@@ -1,10 +1,10 @@
 import gymnasium as gym
 import json5
 from buddy_env.envs.utils import *
-from gymnasium.spaces import Discrete, MultiBinary
+from gymnasium import spaces
 import numpy as np
-from typing import Dict
 from collections import defaultdict
+from typing import Dict
 
 
 class BuddyEnv(gym.Env):
@@ -36,11 +36,16 @@ class BuddyEnv(gym.Env):
         self.old_info = None
 
         # 初始化action_space
-        self.action_space = Discrete(self.params_size)
+        self.action_space = spaces.Discrete(self.params_size)
 
         # 这里后期我们可以用一个网络，这个网络训练我们究竟应该从mlir文本中取得什么样的observation才比较好。
-        # 现在，我们仅仅就选择用所有dialect的空间来作为observation。
-        self.observation_space = MultiBinary(self.dialect_size)
+        # 现在，我们仅仅就选择用所有dialect和其对应的op，作为observation。
+        self.observation_space = spaces.Dict(
+            {
+                "Dialects": spaces.MultiBinary(self.dialect_size),
+                "Op_count": spaces.Box(low=0, high=np.inf, shape=(self.dialect_size,), dtype=int),
+            }
+        )
 
         self.compiler = compiler
         self.translator = translator
@@ -51,17 +56,22 @@ class BuddyEnv(gym.Env):
     def _action_to_str(self, action) -> str:
         return self.params_space[action]
 
-    def _get_obs_and_info(self, param: str = '') -> (MultiBinary, Dict):
-        try:
-            info = get_dialects(self.compiler, self.source_file, param)
-            mask = np.zeros(self.dialect_size, dtype=np.int8)
-            for k in info.keys():
-                mask[self.dialects_space[k]] = 1
-            obs = self.observation_space.sample(mask=mask)
-            return obs, info
-        except subprocess.CalledProcessError as cpe:
-            print('_get_obs_and_info CalledProcessError')
-            raise
+    def _dialect_str_to_index(self, dialect_name) -> int:
+        return self.dialects_space[dialect_name]
+
+    def _get_obs_and_info(self, flag: str = '') -> (np.ndarray, Dict):
+        info = get_features(self.compiler, self.source_file, flag)
+        mlir_state = info['state']
+
+        obs = np.zeros((self.dialect_size,), dtype=np.int8)
+
+        # build new obs
+        if mlir_state is True:
+            for dialect, Ops in info.items():
+                for _, count, in Ops.items():
+                    obs[self._dialect_str_to_index(dialect)] += count
+
+        return obs, info
 
     def _test(self) -> bool:
         print("test!!!")
@@ -80,11 +90,15 @@ class BuddyEnv(gym.Env):
         observation = None
         info = None
         reward = 0
-        terminated = False
+        terminated = False  # 看看terminated和 truncated的具体定义，别用错了
         truncated = False
-        try:
-            observation, info = self._get_obs_and_info(param)
-            # 这里发现一个问题：我不需要observation
+
+        observation, info = self._get_obs_and_info(flag=param)
+
+        if info['state'] is False:
+            truncated = True
+            reward -= 30  # 这个数是拍脑门想的
+        else:
             reward += self._compute_reward(info)
             termi = {'llvm', 'builtin'}
             if set(info.keys()) == termi:
@@ -96,12 +110,9 @@ class BuddyEnv(gym.Env):
                 else:
                     truncated = True
                     reward -= 100
-        except subprocess.CalledProcessError as cpe:
-            truncated = True
-            reward -= 30  # 这个数是拍脑门想的
 
-        self.rewards.append(reward)
-        self.passes.append(param)
+            self.rewards.append(reward)
+            self.passes.append(param)
 
         return observation, reward, terminated, truncated, info
 
@@ -134,20 +145,20 @@ class BuddyEnv(gym.Env):
                 rew += 1  # 鼓励对llvm中op的增加
 
         for dialect in only_new_dialect:
-            rew += 1
+            rew += 1  # 出现了新的dialect
             if dialect == 'llvm':  # 尽快出现llvm dialect
                 rew += 1
 
         for dialect in only_old_dialect:
-            rew += 1
+            rew += 1  # 消除了一些dialect
 
         self.old_info = info
         return rew
 
     # 创建临时mlir文件，并获得当前的observation
-    def reset(self, seed=None, options=None) -> (MultiBinary, Dict):
-        self.source_file = copy_file(self._input_file, 'tmp.mlir')
-        obs, self.old_info = self._get_obs_and_info('')
+    def reset(self, seed=None, options=None) -> (np.ndarray, Dict):
+        self.source_file = copy_file(self._input_file, tmp_file_name='tmp.mlir')
+        obs, self.old_info = self._get_obs_and_info(flag='')
         self.passes = []
         self.rewards = []
         return obs, self.old_info
