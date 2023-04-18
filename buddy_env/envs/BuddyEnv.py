@@ -69,10 +69,7 @@ class BuddyEnv(gym.Env):
 
         # build new obs
         if mlir_state is True:
-            for dialect, Ops in info['features'].items():
-                op_count = 0
-                for _, v, in Ops.items():
-                    op_count = int(v) + op_count
+            for dialect, op_count in info['features'].items():
                 obs[self._dialect_str_to_index(dialect)] = op_count
 
         return obs, info

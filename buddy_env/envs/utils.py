@@ -47,22 +47,22 @@ def get_features(compiler: str, source_file: str, tmp_file: str, flag: str = '')
         return info
 
 
-def find_dialects(src_str: str) -> DefaultDict[str, Dict[str, int]]:
+def find_dialects(src_str: str) -> Dict[str, int]:
     """
 
     :param src_str: 将要被处理的字符串
-    :return: {arith: {addf: 1, constant:8, mulf: 1}, ... , }
+    :return: {arith: 10, ... , }
     """
 
     # func.func
     re_dialect = re.compile(r'\b([A-Za-z]\w*)\.([.A-Za-z_]+)\b\s*,\s(\d+)')
 
-    # {arith: {addf: 1, constant:8, mulf: 1}, ... , }
-    features = defaultdict(dict)
+    # {arith: 10, ... , }
+    features = defaultdict(int)
 
     a = re_dialect.finditer(src_str)
     for i in a:
-        features[i.groups()[0]][i.groups()[1]] = i.groups()[2]
+        features[i.groups()[0]] += int(i.groups()[2])
         # print(dialect[i.groups()[0]][i.groups()[1]])
 
     return features
