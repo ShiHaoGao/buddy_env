@@ -107,7 +107,8 @@ class BuddyEnv(gym.Env):
             print("repeat!")
             self.episode_reward -= 10
             self.episode_reset()
-            return np.zeros((self.dialect_size,), dtype=np.int8), -10, False, True, 'current pass repeats!'
+            return np.zeros((self.dialect_size,), dtype=np.int8), -10, False, True, \
+                {'features': None, 'state': False, 'message': 'current pass repeats!'}
 
         # 全新的pass
         param = self._action_to_str(act)
@@ -125,7 +126,8 @@ class BuddyEnv(gym.Env):
             self.render()
             self.episode_reset()
             return np.zeros((self.dialect_size,),
-                            dtype=np.int8), -10, True, False, 'failed! Compiler with pass:{}'.format(param)
+                            dtype=np.int8), -10, True, False, \
+                {'features': None, 'state': False, 'message': 'failed! Compiler with pass:{}'.format(param)}
 
         rew = self._compute_reward(observation)
 
@@ -148,10 +150,13 @@ class BuddyEnv(gym.Env):
         # truncated state
         if self.is_episode_passes_length_ge_max_passes_length():
             self.episode_reset()
-            return observation, rew, False, True, 'The length of passes is greater than max_pass_length'
+            return observation, rew, False, True, \
+                {'features': None, 'state': False, 'message': 'The length of passes is greater than max_pass_length'}
 
         # 还在一个episode中，继续下一个step
-        return observation, rew, False, False, info
+        # return observation, rew, False, False, info
+        return observation, rew, False, False, \
+            {'features': None, 'state': False, 'message': 'failed! Compiler with pass:{}'.format(param)}
 
     def is_final_dialects(self, info) -> bool:
         terminal_dialects = {'llvm', 'builtin'}
@@ -269,10 +274,8 @@ if __name__ == '__main__':
 
     pre_pass = iter([0, 1, 2, 3, 4, 5, 6, 7])
 
-
-
     # train
-    for i in range(100):
+    for i in range(10000):
         action = env.action_space.sample()
         # print(action)
         obs, reward, terminated, truncated, done = env.step(action)

@@ -127,7 +127,7 @@ def test_ppo(args=get_args()):
         episode_per_test=10,
         batch_size=256,
         step_per_collect=2000,
-        stop_fn=lambda mean_reward: mean_reward >= 100,
+        stop_fn=lambda mean_reward: mean_reward >= 60,
     )
     print(result)
 

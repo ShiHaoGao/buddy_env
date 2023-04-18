@@ -10,3 +10,5 @@
 
 新找到的：
 ./mlir-opt ../res/linalg-conv2d.mlir -convert-linalg-to-loops -lower-affine -convert-memref-to-llvm -convert-scf-to-cf -convert-func-to-llvm -reconcile-unrealized-casts -o tmp.mlir
+
+第二种组合：[7, 0, 5, 2, 1, 4, 6, 3] reward = 87

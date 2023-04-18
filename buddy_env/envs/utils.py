@@ -33,7 +33,7 @@ def get_features(compiler: str, source_file: str, tmp_file: str, flag: str = '')
 
     """
 
-    info = {'features': None, 'state': True}
+    info = {'features': {}, 'state': True, 'message': ''}
     try:
         apply_pass(compiler, source_file, tmp_file, flag)
         dialects_res = print_op(compiler, tmp_file)
@@ -43,6 +43,7 @@ def get_features(compiler: str, source_file: str, tmp_file: str, flag: str = '')
     except subprocess.CalledProcessError:
         print("get_dialects: CalledProcessError")
         info['state'] = False
+        info['message'] = 'get_dialects: CalledProcessError'
         return info
 
 
@@ -57,14 +58,14 @@ def find_dialects(src_str: str) -> DefaultDict[str, Dict[str, int]]:
     re_dialect = re.compile(r'\b([A-Za-z]\w*)\.([.A-Za-z_]+)\b\s*,\s(\d+)')
 
     # {arith: {addf: 1, constant:8, mulf: 1}, ... , }
-    dialect = defaultdict(dict)
+    features = defaultdict(dict)
 
     a = re_dialect.finditer(src_str)
     for i in a:
-        dialect[i.groups()[0]][i.groups()[1]] = i.groups()[2]
+        features[i.groups()[0]][i.groups()[1]] = i.groups()[2]
         # print(dialect[i.groups()[0]][i.groups()[1]])
 
-    return dialect
+    return features
 
 
 def apply_pass(compiler: str, source_file_path: str, tmp_file_path: str, flag: str):
