@@ -1,5 +1,7 @@
 import gymnasium as gym
 import json5
+from gymnasium.core import ObsType
+
 from buddy_env.envs.utils import *
 from gymnasium import spaces
 import numpy as np
@@ -15,6 +17,7 @@ class BuddyEnv(gym.Env):
                  compiler,
                  translator,
                  max_pass_length: int = 10):
+        super(BuddyEnv, self).__init__()
         self.source_file = input_file
         self.tmp_file = './tmp.mlir'
 
@@ -47,11 +50,13 @@ class BuddyEnv(gym.Env):
         self.translator = translator
         self.episode_passes_list = None
         self.episode_passes_str = None
-        self.episode_reward = None
-        self.max_pass_length = max_pass_length
+        self.episode_reward = 0
+        self.max_passes_length = max_pass_length
+        self.best_episode_passes_list = None
+        self.best_episode_reward = 0
 
-    def _action_to_str(self, action) -> str:
-        return self.params_space[action]
+    def _action_to_str(self, act) -> str:
+        return self.params_space[act]
 
     def _dialect_str_to_index(self, dialect_name) -> int:
         return self.dialects_space[dialect_name]
@@ -82,11 +87,11 @@ class BuddyEnv(gym.Env):
             print('translate mlir file error!')
             return False
 
-    def step(self, action):
+    def step(self, act):
 
         """
 
-        :param action: pass index
+        :param act: pass index
         :return:
 
         Note:
@@ -95,57 +100,89 @@ class BuddyEnv(gym.Env):
             如果action与episode之前的重复，那么reward -= 10
         """
 
-        rew = 0
-        terminated = False  # 看看terminated和 truncated的具体定义，别用错了
-        truncated = False
+        # 在action执行之前-----------------
+        # 不进行render
+        # truncated state : 通过 reward = -10 ，并结束episode，阻止agent重复作用相同的param
+        if self.is_pass_repeated_in_episode(act):
+            print("repeat!")
+            self.episode_reward -= 10
+            self.episode_reset()
+            return np.zeros((self.dialect_size,), dtype=np.int8), -10, False, True, 'current pass repeats!'
 
-        param = self._action_to_str(action)
-
-        # 通过给punish，防止agent重复作用param
-        if param in self.episode_passes_list:
-            rew -= 5
-
-        self.episode_passes_list.append(action)
+        # 全新的pass
+        param = self._action_to_str(act)
+        self.episode_passes_list.append(act)
         self.episode_passes_str += param + ' '
 
+        # action执行-------------
         observation, info = self._get_obs_and_info(flag=self.episode_passes_str)
 
-        if info['state'] is False:
-            truncated = True
-            rew -= 30  # 这个数是拍脑门想的
-        else:
-            print("cool!!!")
-            rew += self._compute_reward(observation)
-            termi = {'llvm', 'builtin'}
-            print(info)
-            if set(info['features'].keys()) == termi and len(info['features']['builtin'].keys()) == 1:
-                terminated = True
+        # action执行以后------------
+
+        # terminated: reward = -10
+        if self.is_compile_with_pass_failed(info):
+            self.episode_reward -= 10
+            self.render()
+            self.episode_reset()
+            return np.zeros((self.dialect_size,),
+                            dtype=np.int8), -10, True, False, 'failed! Compiler with pass:{}'.format(param)
+
+        rew = self._compute_reward(observation)
+
+        # terminated state
+        if self.is_final_dialects(info):
+            rew += 20
+            if self._test():
                 rew += 50
-                if self._test():
-                    truncated = False
-                    rew += 100
-                else:
-                    truncated = True
-                    rew -= 100
+            else:
+                rew -= 50
+            self.episode_reward += rew
+            self.render()
+            self.episode_reset()
+            return observation, rew, True, False, info
 
         self.episode_reward += rew
         self.old_obs = observation
+        self.render()
 
-        if len(env.episode_passes_list) >= env.max_pass_length:
-            env.close()
-            env.reset()
+        # truncated state
+        if self.is_episode_passes_length_ge_max_passes_length():
+            self.episode_reset()
+            return observation, rew, False, True, 'The length of passes is greater than max_pass_length'
 
-        return observation, rew, terminated, truncated, info
+        # 还在一个episode中，继续下一个step
+        return observation, rew, False, False, info
 
+    def is_final_dialects(self, info) -> bool:
+        terminal_dialects = {'llvm', 'builtin'}
+        return set(info['features'].keys()) == terminal_dialects and len(info['features']['builtin'].keys()) == 1
+
+    # truncated state1
+    def is_pass_repeated_in_episode(self, param: str) -> bool:
+        return param in self.episode_passes_list
+
+    # truncated state2
+    def is_episode_passes_length_ge_max_passes_length(self):
+        return len(self.episode_passes_list) >= self.max_passes_length
+
+    # terminated state1
+    def is_compile_with_pass_failed(self, info):
+        return info['state'] is False
+
+    def episode_reset(self):
+        self.close()
+        self.reset()
+
+    # 在每一个action真正执行后，执行render
     def render(self):
         """
         This function prints information about the passes.
         """
 
         print("pass: {}".format(self.episode_passes_list))
-        print("reward: {}".format(self.episode_reward))
+        print("cumulated reward: {}".format(self.episode_reward))
 
-    # TODO: 计算reward的方式是靠近llvm dialect，还可以把op也加进来，llvm的op越多，reward越高。
+    # 计算reward的方式是靠近llvm dialect，还可以把op也加进来，llvm的op越多，reward越高。
     # 辅助以这种减少dialect数的reward作用。
     # 可以让出现llvm op的reward变多，减少dialect的reward变少
     # 后期加入时间度量后，再更新reward。
@@ -188,7 +225,7 @@ class BuddyEnv(gym.Env):
         # for dialect in only_old_dialect:
         #     rew += 1  # 消除了一些dialect
 
-        print('compute reward:' + str(rew))
+        # print('compute reward:' + str(rew))
         return rew
 
     # 创建临时mlir文件，并获得当前的observation
@@ -204,8 +241,13 @@ class BuddyEnv(gym.Env):
     def close(self):
         print('episode sum is ' + str(self.episode_reward))
         print("episode pass: {}".format(self.episode_passes_list))
+        if self.episode_reward > self.best_episode_reward:
+            self.best_episode_reward = self.episode_reward
+            self.best_episode_passes_list = self.episode_passes_list
+
         self.episode_passes_list = None
         self.episode_reward = None
+        self.episode_passes_str = None
 
         try:
             command = 'rm -f ' + self.tmp_file
@@ -227,20 +269,19 @@ if __name__ == '__main__':
 
     pre_pass = iter([0, 1, 2, 3, 4, 5, 6, 7])
 
+
+
     # train
     for i in range(100):
         action = env.action_space.sample()
         # print(action)
-        obs, reward, terminated, truncated, done = env.step(next(pre_pass))
-        print('reward:', reward)
-        if terminated:
-            print("yes")
+        obs, reward, terminated, truncated, done = env.step(action)
+        # print('reward:', reward)
 
-        if truncated:
-            print("no")
-            print("episode reward: " + str(env.episode_reward))
-            env.close()
-            env.reset()
+        if truncated or terminated:
+            print('episode done!')
+
+            # print("episode reward: " + str(env.episode_reward))
             continue
 
         # if len(env.episode_passes_list) >= env.max_pass_length:
@@ -248,3 +289,5 @@ if __name__ == '__main__':
         #     env.reset()
 
     env.close()
+    print("best reward:" + str(env.best_episode_reward))
+    print("best passes list:" + str(env.best_episode_passes_list))

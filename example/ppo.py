@@ -18,7 +18,7 @@ from tianshou.utils.net.discrete import Actor, Critic
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--task', type=str, default='MountainCar-v0')
+    parser.add_argument('--task', type=str, default='CartPole-v0')
     parser.add_argument('--reward-threshold', type=float, default=None)
     parser.add_argument('--seed', type=int, default=1626)
     parser.add_argument('--buffer-size', type=int, default=20000)
@@ -57,7 +57,7 @@ def test_ppo(args=get_args()):
     args.state_shape = env.observation_space.shape or env.observation_space.n
     args.action_shape = env.action_space.shape or env.action_space.n
     if args.reward_threshold is None:
-        default_reward_threshold = {"MountainCar-v0": 1}
+        default_reward_threshold = {"CartPole-v0": 195}
         args.reward_threshold = default_reward_threshold.get(
             args.task, env.spec.reward_threshold
         )
@@ -143,12 +143,12 @@ def test_ppo(args=get_args()):
         save_best_fn=save_best_fn,
         logger=logger
     )
-    # assert stop_fn(result['best_reward'])
+    assert stop_fn(result['best_reward'])
 
     if __name__ == '__main__':
         pprint.pprint(result)
         # Let's watch its performance!
-        env = gym.make(args.task, render_mode="human")
+        env = gym.make(args.task)
         policy.eval()
         collector = Collector(policy, env)
         result = collector.collect(n_episode=1, render=args.render)

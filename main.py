@@ -114,43 +114,45 @@ def test_ppo(args=get_args()):
     #     policy.update(0, train_collector.buffer, batch_size=512, repeat=1)
     #     train_collector.reset_buffer(keep_statistics=True)
     #     print('range' + str(i) + 'finished')
-
-    # trainer
-    # result = onpolicy_trainer(
-    #     policy,
-    #     train_collector,
-    #     None,
-    #     max_epoch=10,
-    #     step_per_epoch=50000,
-    #     repeat_per_collect=10,
-    #     episode_per_test=10,
-    #     batch_size=256,
-    #     step_per_collect=2000,
-    #     stop_fn=lambda mean_reward: mean_reward >= 200,
-    # )
-    # print(result)
-
     obs, info = env.reset()
 
-    # train
-    for i in range(100):
-        env.render()
-        action = env.action_space.sample()
-        # print(action)
+    # trainer
+    result = onpolicy_trainer(
+        policy,
+        train_collector,
+        None,
+        max_epoch=10,
+        step_per_epoch=50000,
+        repeat_per_collect=10,
+        episode_per_test=10,
+        batch_size=256,
+        step_per_collect=2000,
+        stop_fn=lambda mean_reward: mean_reward >= 100,
+    )
+    print(result)
 
-        obs, reward, terminated, truncated, done = env.step(action)
-
-        if terminated:
-            print("yes")
-
-        if truncated:
-            print("failed")
-            break
-            env.close()
-            env.reset()
-            continue
-
-    env.close()
+    # train_collector.reset()
+    # obs, info = env.reset()
+    #
+    # # train
+    # for i in range(100):
+    #     env.render()
+    #     action = env.action_space.sample()
+    #     # print(action)
+    #
+    #     obs, reward, terminated, truncated, done = env.step(action)
+    #
+    #     if terminated:
+    #         print("yes")
+    #
+    #     if truncated:
+    #         print("failed")
+    #         break
+    #         env.close()
+    #         env.reset()
+    #         continue
+    #
+    # env.close()
 
 
 if __name__ == '__main__':
