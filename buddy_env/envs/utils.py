@@ -41,7 +41,7 @@ def get_features(compiler: str, source_file: str, tmp_file: str, flag: str = '')
         info['features'] = features
         return info
     except subprocess.CalledProcessError:
-        print("get_dialects: CalledProcessError")
+        # print("get_dialects: CalledProcessError")
         info['state'] = False
         info['message'] = 'get_dialects: CalledProcessError'
         return info
@@ -73,7 +73,7 @@ def apply_pass(compiler: str, source_file_path: str, tmp_file_path: str, flag: s
     try:
         ret = subprocess.run(command, shell=True, check=True, capture_output=True)
     except subprocess.CalledProcessError as cpe:
-        print("apply_pass: CalledProcessError")
+        # print("apply_pass: CalledProcessError")
         raise
 
 
@@ -93,7 +93,7 @@ def print_op(compiler: str, file_path: str) -> str:
         return ret.stderr.decode('utf-8')
 
     except subprocess.CalledProcessError as cpe:
-        print("print_op: CalledProcessError")
+        # print("print_op: CalledProcessError")
         raise
 
 

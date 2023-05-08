@@ -18,4 +18,6 @@
 
 ./mlir-opt ../res/linalg-conv2d.mlir -convert-linalg-to-loops -lower-affine -convert-memref-to-llvm -convert-scf-to-cf -convert-func-to-llvm -reconcile-unrealized-casts -o tmp.mlir
 
+./mlir-opt ../res/linalg-conv2d.mlir -convert-memref-to-llvm -convert-linalg-to-loops -convert-func-to-llvm -reconcile-unrealized-casts
+
 #./mlir-translate ./tmp.mlir --mlir-to-llvmir -o tmp.ll

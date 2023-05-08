@@ -84,8 +84,8 @@ def test_ppo(args=get_args()):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     env = gym.make('buddy_env/BuddyEnv-v0', input_file=args.source_file, action_file=args.param_file,
-                   dialect_file=args.dialect_file, compiler=args.compiler, translator=args.translator)
-    obs, info = env.reset()
+                   dialect_file=args.dialect_file, compiler=args.compiler, translator=args.translator,
+                   max_passes_length=10, verbose=False)
     print(env.observation_space.shape)
     print(env.action_space)
 

@@ -29,9 +29,9 @@
 - 如果在一个episode中，有重复的param，那么reward -= 10
 - 经过一个pass后，如果没有变化，那么rew -= 10
 - 经过一个pass后，如果有变化，每个变化的dialect中，rew += 1，如果llvm变化了，额外 rew += 1（因为作用要lower到llvm上）
-- 如果agent在一个episode中给出重复的pass，rew -= 5
 - 如果中间某个参数作用后，编译失败，rew -= 30
-- 如果最终成功translate， rew += 100，反之 -= 100
+- 如果成功lowering到只剩下{llvm, builtin}dialect，并且builtin中只有1个op，为module，那么reward += 20
+- 如果最终成功translate， rew += 50，反之 -= 50
 
 
 问题：
