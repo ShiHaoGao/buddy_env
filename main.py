@@ -116,7 +116,7 @@ def test_ppo(args=get_args()):
         train_collector,
         test_collector,
         max_epoch=10,
-        step_per_epoch=10000,
+        step_per_epoch=50000,
         repeat_per_collect=10,
         episode_per_test=10,
         batch_size=256,
