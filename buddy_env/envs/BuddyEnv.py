@@ -1,6 +1,5 @@
 import gymnasium as gym
 import json5
-from gymnasium.core import ObsType
 
 from buddy_env.envs.utils import *
 from gymnasium import spaces
@@ -50,7 +49,7 @@ class BuddyEnv(gym.Env):
             self.dialects_space[k] = v
 
         # 初始化action_space
-        self.action_space = spaces.Discrete(self.params_size)
+        self.action_space = spaces.Discrete(self.params_size, start=1)  # 从1到params_size+1
 
         # 这里后期我们可以用一个网络，这个网络训练我们究竟应该从mlir文本中取得什么样的observation才比较好。
         # 现在，我们仅仅就选择用所有dialect和其对应的op，作为observation。
