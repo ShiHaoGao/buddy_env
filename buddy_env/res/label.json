@@ -1,4 +1,5 @@
 [
+  "",
   "-convert-linalg-to-loops",
   "-lower-affine",
   "-convert-scf-to-cf",
@@ -6,5 +7,10 @@
   "-convert-memref-to-llvm",
   "-convert-arith-to-llvm",
   "-convert-func-to-llvm",
-  "-reconcile-unrealized-casts"
+  "-reconcile-unrealized-casts",
+  "-arith-bufferize",
+  "-tensor-bufferize",
+  "-linalg-bufferize",
+  "-convert-math-to-llvm",
+  "-convert-math-to-libm"
 ]
